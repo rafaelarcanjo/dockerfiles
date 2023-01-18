@@ -29,7 +29,7 @@ RUN apk update --no-cache \
 FROM docker.io/alpine:3.15
 
 RUN apk update --no-cache \
-    && apk add --no-cache git bash sshpass openssh \
+    && apk add --no-cache git bash sshpass openssh git \
     && rm -f /usr/lib/libcurl.so.4
 
 COPY "git-ftp.sh" "/usr/local/bin/git-ftp"
