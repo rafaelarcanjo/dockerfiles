@@ -32,6 +32,6 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           push: true
-          context: ansible
-          file: ansible/Dockerfile
+          context: git-sftp
+          file: git-sftp/Dockerfile
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/git-sftp:alpine-3.15-7.81.0_${{ github.run_number }}
