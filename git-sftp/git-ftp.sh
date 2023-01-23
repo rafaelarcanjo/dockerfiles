@@ -436,7 +436,7 @@ print_info() {
 }
 
 cleanup() {
-	rm -rf "$TMP_DIR"
+	return 0
 }
 
 set_default_curl_options() {
@@ -444,7 +444,6 @@ set_default_curl_options() {
 	IFS=" "
 	CURL_ARGS=("${REMOTE_CMD_OPTIONS[@]}")
 	IFS="$OIFS"
-	
     CURL_ARGS+=(--globoff)
 
     # Change by Rafael Silva rafael.silva@alfasoft.pt
@@ -523,23 +522,30 @@ delete_file() {
 }
 
 delete_file_buffered() {
-	echo "-Q \"${REMOTE_DELETE_CMD}${REMOTE_PATH}${1}\"" >> "$TMP_CURL_DELETE_FILE"
+	if [ "$REMOTE_PROTOCOL" == "sftp" ]; then
+		delete_file $1
+	else
+		echo "-Q \"${REMOTE_DELETE_CMD}${REMOTE_PATH}${1}\"" >> "$TMP_CURL_DELETE_FILE"
+	fi
 }
 
 fire_delete_buffer() {
-	if [ ! -f "$TMP_CURL_DELETE_FILE" ]; then
-		return 0
-	fi
-	print_info "Deleting ..."
-	set_default_curl_options
-	CURL_ARGS+=(-K "$TMP_CURL_DELETE_FILE")
-	if [ "${REMOTE_CMD_OPTIONS[0]}" = "-v" ]; then
-		curl "${CURL_ARGS[@]}"
-	else
-		curl "${CURL_ARGS[@]}" > /dev/null 2>&1
-	fi
-	if [ $? -ne 0 ]; then
-		write_log "WARNING: Some files and/or directories could not be deleted."
+	if [ "$REMOTE_PROTOCOL" != "sftp" ]; then
+		if [ ! -f "$TMP_CURL_DELETE_FILE" ]; then
+			return 0
+		fi
+		print_info "Deleting ..."
+		echo "url = $REMOTE_BASE_URL" >> "$TMP_CURL_DELETE_FILE"
+		set_default_curl_options
+		CURL_ARGS+=(-K "$TMP_CURL_DELETE_FILE")
+		if [ "${REMOTE_CMD_OPTIONS[0]}" = "-v" ]; then
+			curl "${CURL_ARGS[@]}"
+		else
+			curl "${CURL_ARGS[@]}" > /dev/null 2>&1
+		fi
+		if [ $? -ne 0 ]; then
+			write_log "WARNING: Some files and/or directories could not be deleted."
+		fi
 	fi
 }
 
@@ -849,7 +855,13 @@ handle_file_sync() {
 
 	while IFS= read -r -d '' FILE_NAME; do
 		(( DONE_ITEMS++ ))
-		print_info "[$DONE_ITEMS of $TOTAL_ITEMS] Buffered for delete '$FILE_NAME'."
+
+		if [ "$REMOTE_PROTOCOL" == "sftp" ]; then
+			print_info "[$DONE_ITEMS of $TOTAL_ITEMS] Deleting '$FILE_NAME'."
+		else
+			print_info "[$DONE_ITEMS of $TOTAL_ITEMS] Buffered for delete '$FILE_NAME'."
+		fi
+
 		if [ $DRY_RUN -ne 1 ]; then
 			local file="${FILE_NAME#$SYNCROOT}"
 			delete_file_buffered "$file"
@@ -1463,7 +1475,6 @@ check_remote_access() {
 	set_default_curl_options
 	CURL_ARGS+=(--ftp-create-dirs)
 	CURL_ARGS+=("$REMOTE_BASE_URL/$REMOTE_PATH")
-
 	curl "${CURL_ARGS[@]}" > /dev/null
 	
 	local EXIT_CODE=$?
@@ -1758,7 +1769,7 @@ do
 					REMOTE_CACERT=$(expr "z$1" : 'z-[^=]*=\(.*\)')
 					;;
 				1,*)
-					print error_and_die "Too few arguments for option --cacert" "$ERROR_MISSING_ARGUMENTS"
+					print_error_and_die "Too few arguments for option --cacert" "$ERROR_MISSING_ARGUMENTS"
 					;;
 				*)
 					if ! echo "$2" | egrep -q '^-'; then
